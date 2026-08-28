@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FaceReader Go — prototype</title>
+<style>
+  :root{
+    --ink:#0b0b0b;--sec:#3f3f3d;--muted:#8a897f;
+    --blue:#2a78d6;--blue-dk:#0f4761;--orange:#eb6834;--orange-dk:#b8461f;
+    --good:#0ca30c;--line:#e6e7ea;
+    --font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  html{overflow-x:hidden}
+  body{font-family:var(--font);color:#fff;min-height:100vh;padding:20px 20px 44px;
+    background:
+      radial-gradient(circle at 80% 12%,rgba(235,104,52,.28),transparent 44%),
+      linear-gradient(160deg,#0f2740,#0f4761 55%,#123a55);
+    background-attachment:fixed}
+  .app{width:100%;max-width:460px;margin:0 auto;text-align:center}
+  .brand{font-size:.72rem;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#9cc4ee}
+  h1{font-size:clamp(1.55rem,7vw,2.05rem);font-weight:800;margin:.12em 0 .3em;letter-spacing:-.02em}
+
+  .modebar{display:flex;gap:7px;overflow-x:auto;padding:2px 0 6px;margin:0 -4px 8px;scrollbar-width:none}
+  .modebar::-webkit-scrollbar{display:none}
+  .pill{flex:0 0 auto;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.06);color:#cfe2f7;
+    font-family:inherit;font-weight:700;font-size:.82rem;padding:8px 13px;border-radius:999px;cursor:pointer;white-space:nowrap;transition:.12s}
+  .pill:hover{background:rgba(255,255,255,.12)}
+  .pill.active{background:var(--orange);border-color:var(--orange);color:#fff;box-shadow:0 6px 16px rgba(235,104,52,.4)}
+
+  .sub{color:#cfe2f7;font-size:.98rem;margin:0 auto 16px;max-width:36ch;min-height:2.4em}
+
+  .stage{position:relative;border-radius:24px;overflow:hidden;background:#0b1a28;
+    aspect-ratio:3/4;box-shadow:0 24px 60px rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.08)}
+  video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);background:#0b1a28}
+  .mesh{position:absolute;inset:0;background-image:
+    linear-gradient(rgba(120,190,255,.10) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(120,190,255,.10) 1px,transparent 1px);
+    background-size:22px 22px;mix-blend-mode:screen;pointer-events:none;opacity:.55}
+  .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:22px;text-align:center;gap:12px;background:rgba(9,20,32,.55);backdrop-filter:blur(2px)}
+  .overlay.hidden{display:none}
+  .big-cue{font-size:2.4rem;font-weight:800;letter-spacing:-.01em;text-shadow:0 4px 20px rgba(0,0,0,.5)}
+  .cue-sub{color:#cfe2f7;font-size:.95rem;margin-top:-4px}
+
+  .meters{position:absolute;left:14px;right:14px;bottom:14px;display:flex;flex-direction:column;gap:8px;
+    padding:12px 14px;background:rgba(9,20,32,.55);border-radius:16px;backdrop-filter:blur(3px);
+    border:1px solid rgba(255,255,255,.08)}
+  .meters.hidden{display:none}
+  .mrow{display:flex;align-items:center;gap:10px;font-size:.72rem;color:#dbe8f6}
+  .mrow .lab{width:132px;text-align:left;font-weight:600}
+  .mrow .lab small{color:#9db4cc;font-weight:500}
+  .bar{flex:1;height:9px;border-radius:6px;background:rgba(255,255,255,.13);overflow:hidden}
+  .bar span{display:block;height:100%;width:0%;border-radius:6px;transition:width .08s linear}
+  .val{width:32px;text-align:right;font-variant-numeric:tabular-nums;color:#fff;font-weight:700}
+
+  .live-score{position:absolute;top:14px;left:50%;transform:translateX(-50%);
+    background:rgba(235,104,52,.92);color:#fff;font-weight:800;padding:8px 18px;border-radius:999px;
+    font-size:1.05rem;box-shadow:0 8px 20px rgba(235,104,52,.5);letter-spacing:.02em}
+  .live-score.hidden{display:none}
+  .live-score small{font-weight:700;opacity:.85;font-size:.7rem;letter-spacing:.08em}
+
+  .controls{margin-top:16px;display:flex;flex-direction:column;gap:10px;align-items:center}
+  button.cta{border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:1.05rem;
+    padding:15px 24px;border-radius:15px;background:var(--orange);color:#fff;
+    box-shadow:0 10px 26px rgba(235,104,52,.45);transition:transform .12s,filter .12s;width:100%;max-width:360px}
+  button.cta:hover{transform:translateY(-2px);filter:brightness(1.05)}
+  button.cta:disabled{opacity:.5;cursor:default;transform:none;filter:none}
+  button.ghost{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;
+    font-weight:800;font-size:.95rem;padding:12px 20px;border-radius:12px;cursor:pointer;font-family:inherit;width:100%;max-width:360px}
+  .hint{color:#9db4cc;font-size:.8rem;max-width:38ch;margin:2px auto 0}
+  .banner{color:#ffd3c4;font-size:.85rem;background:rgba(235,104,52,.18);border:1px solid rgba(235,104,52,.4);
+    padding:9px 13px;border-radius:10px;margin-top:6px;display:none}
+  #trackWrap{display:none;align-items:center;justify-content:center;gap:8px;margin-top:2px;padding:12px 20px;border-radius:12px;
+    background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.3);color:#fff;font-weight:800;font-size:.95rem;cursor:pointer;width:100%;max-width:360px}
+
+  .result{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    padding:24px;gap:5px;background:linear-gradient(160deg,#12314a,#0f2338)}
+  .result.show{display:flex}
+  .result .rk-emoji{font-size:3.2rem;line-height:1}
+  .result .rk-label{font-size:1.55rem;font-weight:800;letter-spacing:-.01em;margin-top:2px;text-align:center}
+  .result .rk-num{font-size:3.4rem;font-weight:800;line-height:1;color:var(--orange);margin:2px 0}
+  .result .rk-num small{font-size:1rem;color:#9db4cc;font-weight:700}
+  .result .verdict{font-size:.93rem;color:#eaf3fd;max-width:31ch;margin-top:6px;min-height:3em}
+  .rk-break{width:100%;max-width:300px;margin-top:12px;display:flex;flex-direction:column;gap:7px}
+  .rk-break .mrow{color:#cfe2f7}
+  .rk-break .lab{width:auto;flex:1}
+
+  .hud{margin-top:10px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.72rem;
+    color:#bcd7ef;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.12);
+    border-radius:9px;padding:8px 11px;word-break:break-word;min-height:1.6em}
+  footer{margin-top:16px;color:#88a3bd;font-size:.74rem;line-height:1.5}
+  footer b{color:#b9cde0}
+  .lock{display:inline-flex;align-items:center;gap:5px;color:#8fd6a8;font-weight:600}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="brand">FaceReader Go · prototype</div>
+  <h1 id="title">Rank Your Stank</h1>
+
+  <div class="modebar" id="modebar">
+    <button class="pill active" data-mode="stank">😖 Rank Your Stank</button>
+    <button class="pill" data-mode="rbf">😐 RBF Detector</button>
+    <button class="pill" data-mode="smile">😁 Real or Fake Smile</button>
+    <button class="pill" data-mode="mog">🗿 Mogging Meter</button>
+  </div>
+
+  <p class="sub" id="tagline">Hit play and let the beat drop. We score the stank on your face at the moment the groove lands.</p>
+
+  <div class="stage">
+    <video id="video" playsinline muted></video>
+    <div class="mesh"></div>
+
+    <div class="live-score hidden" id="liveScore"><small id="liveLab">STANK</small> <span id="liveNum">0</span></div>
+
+    <div class="overlay" id="overlay">
+      <div class="big-cue" id="cueBig">📷</div>
+      <div class="cue-sub" id="cueSub">Camera off</div>
+    </div>
+
+    <div class="meters hidden" id="meters">
+      <div class="mrow"><div class="lab" id="labM1">Nose &amp; Brow <small>AU4·AU9</small></div><div class="bar"><span id="barM1" style="background:#eb6834"></span></div><div class="val" id="valM1">0</div></div>
+      <div class="mrow"><div class="lab" id="labM2">Cheek / Eyes <small>AU6</small></div><div class="bar"><span id="barM2" style="background:#3f8ee8"></span></div><div class="val" id="valM2">0</div></div>
+      <div class="mrow"><div class="lab" id="labM3">Head Bob <small>motion</small></div><div class="bar"><span id="barM3" style="background:#9db4cc"></span></div><div class="val" id="valM3">0</div></div>
+    </div>
+
+    <div class="result" id="result">
+      <div class="rk-emoji" id="rkEmoji">😖</div>
+      <div class="rk-label" id="rkLabel">—</div>
+      <div class="rk-num" id="rkNum">0<small>/100</small></div>
+      <div class="verdict" id="verdict"></div>
+      <div class="rk-break">
+        <div class="mrow"><div class="lab" id="pkLabA">Peak A</div><div class="bar"><span id="pkA" style="background:#eb6834"></span></div><div class="val" id="pkAv">0</div></div>
+        <div class="mrow"><div class="lab" id="pkLabB">Peak B</div><div class="bar"><span id="pkB" style="background:#3f8ee8"></span></div><div class="val" id="pkBv">0</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hud" id="hud">tracker: idle</div>
+
+  <div class="controls">
+    <button class="cta" id="mainBtn">Enable camera</button>
+    <button class="ghost" id="finishBtn" style="display:none">Finish &amp; rank me ↦</button>
+    <button class="ghost" id="againBtn" style="display:none">Try again ↺</button>
+    <div class="hint" id="hint"><span class="lock">🔒 Runs 100% in your browser. Your face is never uploaded.</span></div>
+    <label id="trackWrap">🎵 Use your own track<input type="file" id="fileInput" accept="audio/*" style="display:none"></label>
+    <div class="banner" id="banner"></div>
+  </div>
+
+  <footer>
+    <b>Prototype note:</b> face tracking here uses a free in-browser model to prove the experience. The production app runs on the validated FaceReader engine.<br>
+    Concept: Noldus × VicarVision · FaceReader Mobile revival
+  </footer>
+</div>
+
+<script type="module">
+import { FaceLandmarker, FilesetResolver } from "./vision_bundle.mjs";
+
+const $ = id => document.getElementById(id);
+const video=$("video"), overlay=$("overlay"), cueBig=$("cueBig"), cueSub=$("cueSub");
+const meters=$("meters"), liveScore=$("liveScore"), liveNum=$("liveNum"), liveLab=$("liveLab");
+const result=$("result"), mainBtn=$("mainBtn"), finishBtn=$("finishBtn"), againBtn=$("againBtn");
+const hint=$("hint"), hud=$("hud"), banner=$("banner"), trackWrap=$("trackWrap"), fileInput=$("fileInput");
+const title=$("title"), tagline=$("tagline");
+const labM1=$("labM1"), labM2=$("labM2"), labM3=$("labM3");
+const barM1=$("barM1"), barM2=$("barM2"), barM3=$("barM3");
+const valM1=$("valM1"), valM2=$("valM2"), valM3=$("valM3");
+
+let landmarker=null, stream=null, running=false, state="idle";
+let fsr=null, usingDelegate="", frameCnt=0, faceFrames=0, switching=false;
+let measuring=false, curMode="stank";
+let noseHist=[], scrunchBase=0;
+let agg={best:-1,snap:null,sum:0,cnt:0};
+let song=null, songUrl="./song.mp3";
+const MEASURE_MS=4200;
+
+const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+const pct=v=>Math.max(0,Math.min(100,v*100));
+const showErr=m=>{banner.style.display="block";banner.textContent=m;};
+const isMobileDevice=()=>/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||navigator.maxTouchPoints>1;
+
+/* ---------------- MODES ---------------- */
+const tier=(list,sc)=>list.find(t=>sc>=t.min);
+const MODES={
+  stank:{
+    name:"Rank Your Stank", live:"STANK", music:true, aggregate:"peak",
+    cta:"Hit play & rank my stank",
+    tagline:"Hit play and let the beat drop. We score the stank on your face at the moment the groove lands.",
+    meters:[["Nose &amp; Brow","AU4 · AU9"],["Cheek / Eyes","AU6"],["Head Bob","motion"]],
+    score(s){
+      const grim=clamp(Math.max(s.brow, s.nose*2.2, s.lip*1.7, s.scrunch*1.5));
+      const au6=clamp(Math.max(s.cheek, 0.7*s.eye));
+      return {score:clamp((0.42*grim+0.30*au6+0.16*s.head+0.12*s.lip)*1.8), m1:grim, m2:au6, m3:s.head};
+    },
+    tiers:[{min:85,l:"ABSOLUTELY RANCID",e:"🤮🔥"},{min:70,l:"CERTIFIED FILTHY",e:"😖🔥"},{min:52,l:"PROPER NASTY",e:"😝"},{min:34,l:"MILD SAUCE",e:"😬"},{min:0,l:"STONE COLD",e:"😐"}],
+    verdict(sig,sc){ if(sc<0.34) return "Barely a flicker. Either the beat wasn't filthy enough, or you have a world-class poker face."; return sig.m2>=0.18? "You stank with your eyes. That AU6 crinkle is the Duchenne tell: the pleasure is real. 👀" : "All grimace, no eyes. Big stank face, but your AU6 stayed flat, so it reads a little… forced."; }
+  },
+  rbf:{
+    name:"RBF Detector", live:"RBF", music:false, aggregate:"avg",
+    cta:"Hold neutral & scan me",
+    tagline:"Relax your face completely and hold a blank, resting expression. We measure how unfriendly your neutral reads.",
+    holdText:"Hold your blank, resting face", getReady:"Relax your face…",
+    meters:[["Mouth downturn","AU15"],["Lip tightener","AU24"],["Asymmetry","contempt"]],
+    score(s){
+      const rbf=clamp((0.45*s.frown + 0.28*s.press + 0.30*s.dimple + 0.16*s.brow + 0.9*s.asym)*1.5);
+      return {score:rbf, m1:s.frown, m2:s.press, m3:s.asym};
+    },
+    tiers:[{min:66,l:"ABSOLUTE MENACE",e:"😠"},{min:48,l:"CERTIFIED RBF",e:"😒"},{min:30,l:"MILD RBF",e:"😐"},{min:15,l:"APPROACHABLE",e:"🙂"},{min:0,l:"TOTAL SWEETHEART",e:"😇"}],
+    verdict(sig,sc){ return sc>=0.30? "Even at rest, your face leaks a trace of contempt. You're not unfriendly, observers just read it that way. That's the RBF illusion." : "Genuinely warm at rest. Your neutral face reads as approachable. No RBF here."; }
+  },
+  smile:{
+    name:"Real or Fake Smile", live:"REAL?", music:false, aggregate:"peakSmile",
+    cta:"Smile for the camera",
+    tagline:"On the countdown, give me your biggest smile. We check whether your eyes are in on it, the tell of a genuine, felt smile.",
+    holdText:"Smile as big as you can!", getReady:"Get your grin ready…",
+    meters:[["Smile","AU12"],["Eye crinkle","AU6"],["Duchenne","realness"]],
+    score(s){
+      const smile=s.smile;
+      const eyes=clamp(Math.max(s.cheek, 0.8*s.eye));
+      const real= smile>0.25 ? clamp(eyes*1.9) : 0;
+      return {score:real, m1:smile, m2:eyes, m3:real, smile:smile};
+    },
+    tiers:[{min:62,l:"THE REAL DEAL",e:"😄"},{min:40,l:"MOSTLY GENUINE",e:"🙂"},{min:22,l:"POLITE & POSED",e:"😬"},{min:0,l:"PURE ROBOT",e:"🤖"}],
+    special(sc,sig){ if(!sig || (sig.smile||0)<0.25) return {e:"🫥",l:"NO SMILE FOUND",v:"I didn't catch a real smile. On the countdown, grin as big as you can."}; return null; },
+    verdict(sig,sc){ return sc>=0.40? "Your eyes crinkled, orbicularis oculi fired. That is a true, felt Duchenne smile you cannot fake on command." : "Big mouth, flat eyes. The camera sees a polite, posed smile, not a felt one."; }
+  },
+  mog:{
+    name:"Mogging Meter", live:"MOG", music:false, aggregate:"peak",
+    cta:"Strike your mog",
+    tagline:"Chin up. Jaw tight. Cold, dominant stare, and no smile. Let's see how hard you're mogging the camera.",
+    holdText:"Hold the mog, jaw tight, eyes cold", getReady:"Lock in your mog…",
+    meters:[["Jaw jut / clench","jaw"],["Cold stare","eyes"],["Intensity","brow"]],
+    score(s){
+      const jaw=clamp(Math.max(s.jawFwd*1.3, s.press*1.2));
+      const blinkStare=s.blink<0.15?(0.15-s.blink)/0.15*0.5:0;
+      const stare=clamp(Math.max(s.wide, blinkStare) + 0.4*s.brow);
+      let mog=clamp((0.5*jaw + 0.45*stare)*1.6);
+      if(s.smile>0.2) mog*=0.6;
+      return {score:mog, m1:jaw, m2:stare, m3:s.brow};
+    },
+    tiers:[{min:70,l:"GIGACHAD",e:"🗿"},{min:50,l:"CERTIFIED MOGGER",e:"😎"},{min:30,l:"HOLDING YOUR OWN",e:"🙂"},{min:0,l:"YOU GOT MOGGED",e:"😳"}],
+    verdict(sig,sc){ return sc>=0.50? "Jaw sharp, eyes cold, zero smile. You mogged the lens into submission." : "The camera mogged you. Chin up, clench the jaw, kill the smile, and stare it down."; }
+  }
+};
+
+/* ---------------- events ---------------- */
+mainBtn.addEventListener("click",()=>{
+  if(state==="idle") enableCamera();
+  else if(state==="loadfail") loadTracker();
+  else if(state==="ready") startRun();
+});
+finishBtn.addEventListener("click", finishRun);
+againBtn.addEventListener("click", ()=>selectMode(curMode));
+document.querySelectorAll('.pill').forEach(p=>p.addEventListener('click',()=>selectMode(p.dataset.mode)));
+fileInput.addEventListener("change",(e)=>{
+  const fl=e.target.files&&e.target.files[0]; if(!fl) return;
+  try{ if(song) song.pause(); }catch(_){}
+  songUrl=URL.createObjectURL(fl); song=null; ensureSong();
+  hint.innerHTML='🎵 Loaded “'+fl.name+'”. Hit play to rank your stank to it.';
+});
+
+/* ---------------- camera + model ---------------- */
+async function enableCamera(){
+  try{
+    mainBtn.disabled=true; cueBig.textContent="…"; cueSub.textContent="Waking up the camera";
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:640,height:480},audio:false});
+    video.srcObject=stream; await video.play();
+  }catch(e){
+    mainBtn.disabled=false; cueBig.textContent="📷"; cueSub.textContent="Camera off";
+    showErr("Couldn't start the CAMERA. Allow camera access and use https or localhost. ("+((e&&e.message)||e)+")");
+    return;
+  }
+  overlay.classList.add("hidden"); meters.classList.remove("hidden"); liveScore.classList.remove("hidden");
+  await loadTracker();
+}
+function makeLandmarker(fileset,delegate){
+  return FaceLandmarker.createFromOptions(fileset,{
+    baseOptions:{modelAssetPath:"./face_landmarker.task",delegate},
+    outputFaceBlendshapes:true, runningMode:"VIDEO", numFaces:1
+  });
+}
+async function loadTracker(){
+  banner.style.display="none";
+  mainBtn.disabled=true; mainBtn.textContent="Loading face tracker…";
+  hud.textContent="camera on ✓  loading face tracker…";
+  try{
+    fsr=await FilesetResolver.forVisionTasks("./wasm");
+    const mobile=isMobileDevice();
+    try{ landmarker=await makeLandmarker(fsr, mobile?"CPU":"GPU"); usingDelegate=mobile?"CPU":"GPU"; }
+    catch(e){ hud.textContent="retrying tracker on CPU…"; landmarker=await makeLandmarker(fsr,"CPU"); usingDelegate="CPU"; }
+    state="ready"; running=true;
+    selectMode(curMode);
+    hud.textContent="tracker ready ✓  make a face to test the meters";
+    predict();
+  }catch(e){
+    const msg=(e&&e.message)?e.message:String(e);
+    state="loadfail"; running=false;
+    hud.textContent="TRACKER LOAD FAILED → "+msg;
+    mainBtn.disabled=false; mainBtn.textContent="↻ Retry loading tracker";
+    showErr("Face tracker could not load. REAL ERROR: "+msg+"  (copy this to Claude)");
+  }
+}
+
+/* ---------------- signals ---------------- */
+const dist=(L,a,b)=>Math.hypot(L[a].x-L[b].x, L[a].y-L[b].y);
+function readSignals(res){
+  const m={}; for(const c of res.faceBlendshapes[0].categories){ m[c.categoryName||c.displayName]=c.score; }
+  const g=n=>m[n]||0, av=(a,b)=>(g(a)+g(b))/2;
+  const s={
+    smile:av('mouthSmileLeft','mouthSmileRight'),
+    cheek:av('cheekSquintLeft','cheekSquintRight'),
+    eye:av('eyeSquintLeft','eyeSquintRight'),
+    nose:av('noseSneerLeft','noseSneerRight'),
+    lip:av('mouthUpperUpLeft','mouthUpperUpRight'),
+    brow:av('browDownLeft','browDownRight'),
+    frown:av('mouthFrownLeft','mouthFrownRight'),
+    press:av('mouthPressLeft','mouthPressRight'),
+    dimple:av('mouthDimpleLeft','mouthDimpleRight'),
+    wide:av('eyeWideLeft','eyeWideRight'),
+    blink:av('eyeBlinkLeft','eyeBlinkRight'),
+    jawOpen:g('jawOpen'),
+    jawFwd:g('jawForward'),
+    asym:clamp(Math.abs(g('mouthSmileLeft')-g('mouthSmileRight'))*3 + Math.abs(g('mouthDimpleLeft')-g('mouthDimpleRight'))*3),
+    scrunch:0, head:0
+  };
+  if(res.faceLandmarks && res.faceLandmarks.length){
+    const L=res.faceLandmarks[0];
+    noseHist.push(L[1].y); if(noseHist.length>12) noseHist.shift();
+    let mv=0; for(let i=1;i<noseHist.length;i++) mv+=Math.abs(noseHist[i]-noseHist[i-1]); s.head=clamp(mv*4.2);
+    const io=dist(L,33,263);
+    if(io>0){ const open=dist(L,2,13)/io; if(isFinite(open)){ scrunchBase=Math.max(open,scrunchBase*0.99); if(scrunchBase>0) s.scrunch=clamp((scrunchBase-open)/scrunchBase*2.6); } }
+  }
+  return s;
+}
+
+/* ---------------- predict loop ---------------- */
+function predict(){
+  if(!running){return;}
+  if(landmarker && video.readyState>=2 && video.videoWidth>0){
+    let res=null, err=null;
+    try{ res=landmarker.detectForVideo(video, performance.now()); }
+    catch(e){ err=(e&&e.message)?e.message:String(e); }
+    let faceOK=false, r={score:0,m1:0,m2:0,m3:0}, sig=null;
+    if(res && res.faceBlendshapes && res.faceBlendshapes.length){
+      faceOK=true; sig=readSignals(res); r=MODES[curMode].score(sig);
+    }
+    updateMeters(r); liveNum.textContent=Math.round(r.score*100);
+    if(measuring && sig){
+      const M=MODES[curMode];
+      if(M.aggregate==="avg"){ agg.sum+=r.score; agg.cnt++; agg.snap={r:{...r},sig:{...sig}}; }
+      else {
+        const tv = M.aggregate==="peakSmile" ? sig.smile : r.score;
+        if(tv>agg.best){ agg.best=tv; agg.snap={r:{...r},sig:{...sig}}; }
+      }
+    }
+    frameCnt++; if(faceOK) faceFrames++;
+    if(frameCnt===70 && faceFrames===0 && usingDelegate==="GPU" && !switching && fsr){
+      switching=true; usingDelegate="switching";
+      makeLandmarker(fsr,"CPU").then(lm=>{landmarker=lm;usingDelegate="CPU";}).catch(()=>{}).finally(()=>{switching=false;frameCnt=0;faceFrames=0;});
+    }
+    hud.textContent = err ? ("tracker error: "+err)
+      : (faceOK ? (curMode+"  m1:"+r.m1.toFixed(2)+" m2:"+r.m2.toFixed(2)+" m3:"+r.m3.toFixed(2)+"  →  score "+Math.round(r.score*100))
+                : "no face detected — center your face with good light");
+  }
+  requestAnimationFrame(predict);
+}
+function updateMeters(r){
+  barM1.style.width=pct(r.m1)+"%"; valM1.textContent=Math.round(pct(r.m1));
+  barM2.style.width=pct(r.m2)+"%"; valM2.textContent=Math.round(pct(r.m2));
+  barM3.style.width=pct(r.m3)+"%"; valM3.textContent=Math.round(pct(r.m3));
+}
+
+/* ---------------- mode selection ---------------- */
+function selectMode(key){
+  curMode=key; const M=MODES[key];
+  document.querySelectorAll('.pill').forEach(p=>p.classList.toggle('active',p.dataset.mode===key));
+  title.textContent=M.name; tagline.textContent=M.tagline;
+  labM1.innerHTML=M.meters[0][0]+' <small>'+M.meters[0][1]+'</small>';
+  labM2.innerHTML=M.meters[1][0]+' <small>'+M.meters[1][1]+'</small>';
+  labM3.innerHTML=M.meters[2][0]+' <small>'+M.meters[2][1]+'</small>';
+  liveLab.textContent=M.live;
+  trackWrap.style.display = M.music ? "inline-flex" : "none";
+  result.classList.remove("show"); finishBtn.style.display="none"; measuring=false;
+  try{ if(song) song.pause(); }catch(_){}
+  if(state==="idle" || state==="loadfail") return;
+  state="ready"; running=true;
+  overlay.classList.add("hidden");
+  mainBtn.style.display="inline-block"; mainBtn.disabled=false; mainBtn.textContent="▶  "+M.cta;
+  againBtn.style.display="none";
+  hint.innerHTML='<span class="lock">🔒 On-device. Nothing leaves your phone.</span>';
+}
+
+/* ---------------- run / measure ---------------- */
+function resetAgg(){ agg={best:-1,snap:null,sum:0,cnt:0}; }
+function ensureSong(){
+  if(song) return;
+  song=new Audio(songUrl); song.preload="auto";
+  song.addEventListener("ended", finishRun);
+  song.addEventListener("error", ()=>{ if(state==="playing" && curMode==="stank") showErr("Could not play the track (song.mp3)."); });
+}
+function countdown(done){
+  const M=MODES[curMode]; let n=3;
+  overlay.classList.remove("hidden"); overlay.style.background="rgba(9,20,32,.5)";
+  cueBig.textContent=n; cueSub.textContent=M.getReady||"Get ready…";
+  const iv=setInterval(()=>{ n--; if(n>0){cueBig.textContent=n;} else { clearInterval(iv); cueBig.textContent="GO!"; done(); } },800);
+}
+function startRun(){
+  if(state!=="ready") return;
+  const M=MODES[curMode];
+  state="playing"; mainBtn.disabled=true; againBtn.style.display="none"; resetAgg();
+  if(M.music){
+    ensureSong();
+    try{ song.volume=0; song.currentTime=0; const up=song.play(); if(up&&up.catch) up.catch(()=>{}); }catch(e){}
+    countdown(()=>{
+      overlay.classList.add("hidden"); finishBtn.style.display="inline-block";
+      hint.innerHTML="🎶 Stank when the beat hits. Tap Finish when you have peaked.";
+      measuring=true;
+      try{ song.currentTime=0; song.volume=1; if(song.paused){ const p=song.play(); if(p&&p.catch)p.catch(()=>{}); } }catch(e){}
+    });
+  } else {
+    countdown(()=>{
+      overlay.classList.add("hidden");
+      measuring=true;
+      hint.innerHTML="😤 "+(M.holdText||"Hold it")+" (measuring)";
+      setTimeout(finishRun, MEASURE_MS);
+    });
+  }
+}
+function finishRun(){
+  if(state!=="playing") return;
+  measuring=false;
+  try{ if(song) song.pause(); }catch(e){}
+  finishBtn.style.display="none"; overlay.classList.add("hidden");
+  showResult();
+}
+
+/* ---------------- result ---------------- */
+function showResult(){
+  state="result";
+  const M=MODES[curMode];
+  let score;
+  if(M.aggregate==="avg"){ score=agg.cnt? agg.sum/agg.cnt : 0; }
+  else { score= agg.snap? agg.snap.r.score : 0; }
+  const snapR = agg.snap? agg.snap.r : {m1:0,m2:0,m3:0};
+  const snapSig = agg.snap? agg.snap.sig : {};
+  const sc=Math.round(score*100);
+
+  let emoji, label, vtext;
+  const sp = M.special ? M.special(score, snapSig) : null;
+  if(sp){ emoji=sp.e; label=sp.l; vtext=sp.v; }
+  else { const t=tier(M.tiers,sc); emoji=t.e; label=t.l; vtext=M.verdict(snapR, score); }
+
+  $("rkEmoji").textContent=emoji;
+  $("rkLabel").textContent=label;
+  $("rkNum").innerHTML=sc+'<small>/100</small>';
+  $("verdict").textContent=vtext;
+  $("pkLabA").innerHTML=M.meters[0][0];
+  $("pkLabB").innerHTML=M.meters[1][0];
+  $("pkA").style.width=pct(snapR.m1)+"%"; $("pkAv").textContent=Math.round(pct(snapR.m1));
+  $("pkB").style.width=pct(snapR.m2)+"%"; $("pkBv").textContent=Math.round(pct(snapR.m2));
+
+  result.classList.add("show");
+  mainBtn.style.display="none"; againBtn.style.display="inline-block"; againBtn.textContent="Try again ↺";
+  hint.innerHTML="📸 Screenshot your result to share it.";
+}
+</script>
+</body>
+</html>
