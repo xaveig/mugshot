@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FaceReader Go — prototype</title>
+<title>Mugshot — prototype</title>
 <style>
   :root{
     --ink:#0b0b0b;--sec:#3f3f3d;--muted:#8a897f;
@@ -98,7 +98,7 @@
 </head>
 <body>
 <div class="app">
-  <div class="brand">FaceReader Go · prototype</div>
+  <div class="brand">Mugshot · prototype</div>
   <h1 id="title">Rank Your Stank</h1>
 
   <div class="modebar" id="modebar">
@@ -122,8 +122,8 @@
     </div>
 
     <div class="meters hidden" id="meters">
-      <div class="mrow"><div class="lab" id="labM1">Nose &amp; Brow <small>AU4·AU9</small></div><div class="bar"><span id="barM1" style="background:#eb6834"></span></div><div class="val" id="valM1">0</div></div>
-      <div class="mrow"><div class="lab" id="labM2">Cheek / Eyes <small>AU6</small></div><div class="bar"><span id="barM2" style="background:#3f8ee8"></span></div><div class="val" id="valM2">0</div></div>
+      <div class="mrow"><div class="lab" id="labM1">Nose &amp; Brow <small>the grimace</small></div><div class="bar"><span id="barM1" style="background:#eb6834"></span></div><div class="val" id="valM1">0</div></div>
+      <div class="mrow"><div class="lab" id="labM2">Cheeks &amp; Eyes <small>the smile tell</small></div><div class="bar"><span id="barM2" style="background:#3f8ee8"></span></div><div class="val" id="valM2">0</div></div>
       <div class="mrow"><div class="lab" id="labM3">Head Bob <small>motion</small></div><div class="bar"><span id="barM3" style="background:#9db4cc"></span></div><div class="val" id="valM3">0</div></div>
     </div>
 
@@ -169,6 +169,10 @@ const labM1=$("labM1"), labM2=$("labM2"), labM3=$("labM3");
 const barM1=$("barM1"), barM2=$("barM2"), barM3=$("barM3");
 const valM1=$("valM1"), valM2=$("valM2"), valM3=$("valM3");
 
+/* Respondents never see the raw component line; add ?debug=1 to the URL to show it for tuning. */
+const DEBUG = /[?&](debug|dev)=1/.test(location.search);
+if(!DEBUG) hud.style.display="none";
+
 let landmarker=null, stream=null, running=false, state="idle";
 let fsr=null, usingDelegate="", frameCnt=0, faceFrames=0, switching=false;
 let measuring=false, curMode="stank";
@@ -189,21 +193,21 @@ const MODES={
     name:"Rank Your Stank", live:"STANK", music:true, aggregate:"peak",
     cta:"Hit play & rank my stank",
     tagline:"Hit play and let the beat drop. We score the stank on your face at the moment the groove lands.",
-    meters:[["Nose &amp; Brow","AU4 · AU9"],["Cheek / Eyes","AU6"],["Head Bob","motion"]],
+    meters:[["Nose &amp; Brow","the grimace"],["Cheeks &amp; Eyes","the smile tell"],["Head Bob","motion"]],
     score(s){
       const grim=clamp(Math.max(s.brow, s.nose*2.2, s.lip*1.7, s.scrunch*1.5));
       const au6=clamp(Math.max(s.cheek, 0.7*s.eye));
       return {score:clamp((0.42*grim+0.30*au6+0.16*s.head+0.12*s.lip)*1.8), m1:grim, m2:au6, m3:s.head};
     },
     tiers:[{min:85,l:"ABSOLUTELY RANCID",e:"🤮🔥"},{min:70,l:"CERTIFIED FILTHY",e:"😖🔥"},{min:52,l:"PROPER NASTY",e:"😝"},{min:34,l:"MILD SAUCE",e:"😬"},{min:0,l:"STONE COLD",e:"😐"}],
-    verdict(sig,sc){ if(sc<0.34) return "Barely a flicker. Either the beat wasn't filthy enough, or you have a world-class poker face."; return sig.m2>=0.18? "You stank with your eyes. That AU6 crinkle is the Duchenne tell: the pleasure is real. 👀" : "All grimace, no eyes. Big stank face, but your AU6 stayed flat, so it reads a little… forced."; }
+    verdict(sig,sc){ if(sc<0.34) return "Barely a flicker. Either the beat wasn't filthy enough, or you have a world-class poker face."; return sig.m2>=0.18? "The crinkle around your eyes gives it away: that pleasure is real. 👀" : "All grimace, no eyes. Big stank face, but your eyes stayed flat, so it reads a little… forced."; }
   },
   rbf:{
     name:"RBF Detector", live:"RBF", music:false, aggregate:"avg",
     cta:"Hold neutral & scan me",
     tagline:"Relax your face completely and hold a blank, resting expression. We measure how unfriendly your neutral reads.",
     holdText:"Hold your blank, resting face", getReady:"Relax your face…",
-    meters:[["Mouth downturn","AU15"],["Lip tightener","AU24"],["Asymmetry","contempt"]],
+    meters:[["Mouth","downturn"],["Lips","tension"],["Asymmetry","the tell"]],
     score(s){
       const rbf=clamp((0.45*s.frown + 0.28*s.press + 0.30*s.dimple + 0.16*s.brow + 0.9*s.asym)*1.5);
       return {score:rbf, m1:s.frown, m2:s.press, m3:s.asym};
@@ -216,7 +220,7 @@ const MODES={
     cta:"Smile for the camera",
     tagline:"On the countdown, give me your biggest smile. We check whether your eyes are in on it, the tell of a genuine, felt smile.",
     holdText:"Smile as big as you can!", getReady:"Get your grin ready…",
-    meters:[["Smile","AU12"],["Eye crinkle","AU6"],["Duchenne","realness"]],
+    meters:[["Smile","your grin"],["Eye crinkle","the real tell"],["Genuineness","eyes in?"]],
     score(s){
       const smile=s.smile;
       const eyes=clamp(Math.max(s.cheek, 0.8*s.eye));
@@ -225,14 +229,14 @@ const MODES={
     },
     tiers:[{min:62,l:"THE REAL DEAL",e:"😄"},{min:40,l:"MOSTLY GENUINE",e:"🙂"},{min:22,l:"POLITE & POSED",e:"😬"},{min:0,l:"PURE ROBOT",e:"🤖"}],
     special(sc,sig){ if(!sig || (sig.smile||0)<0.25) return {e:"🫥",l:"NO SMILE FOUND",v:"I didn't catch a real smile. On the countdown, grin as big as you can."}; return null; },
-    verdict(sig,sc){ return sc>=0.40? "Your eyes crinkled, orbicularis oculi fired. That is a true, felt Duchenne smile you cannot fake on command." : "Big mouth, flat eyes. The camera sees a polite, posed smile, not a felt one."; }
+    verdict(sig,sc){ return sc>=0.40? "Your eyes crinkled right along with your mouth. That's a true, felt smile you cannot fake on command." : "Big mouth, flat eyes. The camera sees a polite, posed smile, not a felt one."; }
   },
   mog:{
     name:"Mogging Meter", live:"MOG", music:false, aggregate:"peak",
     cta:"Strike your mog",
     tagline:"Chin up. Jaw tight. Cold, dominant stare, and no smile. Let's see how hard you're mogging the camera.",
     holdText:"Hold the mog, jaw tight, eyes cold", getReady:"Lock in your mog…",
-    meters:[["Jaw jut / clench","jaw"],["Cold stare","eyes"],["Intensity","brow"]],
+    meters:[["Jaw jut / clench","jaw"],["Cold stare","eyes"],["Intensity","the glare"]],
     score(s){
       const jaw=clamp(Math.max(s.jawFwd*1.3, s.press*1.2));
       const blinkStare=s.blink<0.15?(0.15-s.blink)/0.15*0.5:0;
@@ -300,7 +304,7 @@ async function loadTracker(){
     state="loadfail"; running=false;
     hud.textContent="TRACKER LOAD FAILED → "+msg;
     mainBtn.disabled=false; mainBtn.textContent="↻ Retry loading tracker";
-    showErr("Face tracker could not load. REAL ERROR: "+msg+"  (copy this to Claude)");
+    showErr("Face tracker could not load. REAL ERROR: "+msg);
   }
 }
 
@@ -361,9 +365,11 @@ function predict(){
       switching=true; usingDelegate="switching";
       makeLandmarker(fsr,"CPU").then(lm=>{landmarker=lm;usingDelegate="CPU";}).catch(()=>{}).finally(()=>{switching=false;frameCnt=0;faceFrames=0;});
     }
-    hud.textContent = err ? ("tracker error: "+err)
-      : (faceOK ? (curMode+"  m1:"+r.m1.toFixed(2)+" m2:"+r.m2.toFixed(2)+" m3:"+r.m3.toFixed(2)+"  →  score "+Math.round(r.score*100))
-                : "no face detected — center your face with good light");
+    if(DEBUG){
+      hud.textContent = err ? ("tracker error: "+err)
+        : (faceOK ? (curMode+"  m1:"+r.m1.toFixed(2)+" m2:"+r.m2.toFixed(2)+" m3:"+r.m3.toFixed(2)+"  →  score "+Math.round(r.score*100))
+                  : "no face detected — center your face with good light");
+    }
   }
   requestAnimationFrame(predict);
 }
