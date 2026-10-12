@@ -84,7 +84,7 @@
   .result .rk-num{font-size:3.4rem;font-weight:800;line-height:1;color:var(--orange);margin:2px 0}
   .result .rk-num small{font-size:1rem;color:#9db4cc;font-weight:700}
   .result .verdict{font-size:.93rem;color:#eaf3fd;max-width:31ch;margin-top:6px;min-height:3em}
-  .rk-break{width:100%;max-width:300px;margin-top:12px;display:flex;flex-direction:column;gap:7px}
+  .rk-break{display:none}
   .rk-break .mrow{color:#cfe2f7}
   .rk-break .lab{width:auto;flex:1}
 
@@ -277,7 +277,7 @@ async function enableCamera(){
     showErr("Couldn't start the CAMERA. Allow camera access and use https or localhost. ("+((e&&e.message)||e)+")");
     return;
   }
-  overlay.classList.add("hidden"); meters.classList.remove("hidden"); liveScore.classList.remove("hidden");
+  overlay.classList.add("hidden"); liveScore.classList.remove("hidden");
   await loadTracker();
 }
 function makeLandmarker(fileset,delegate){
